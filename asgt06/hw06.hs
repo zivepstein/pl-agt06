@@ -185,21 +185,19 @@
  main :: IO ()
  main = do
           args <- getArgs
-          result <-  (readAndEvalFile (head args))
+          result <-  mainAux args
           putStrLn (prettyPrint $ (map statementToExpr result))
           -- putStrLn mainAux args    
 
- -- mainAux :: [String] -> Program
- -- mainAux [] = do 
- --                split <- (splitOn "\n") <$> getContents
- --                shuf <- fastShuffle split 
- --                return $ intercalate "\n" shuf 
- -- mainAux ("-":xs) = do 
- --                split <- (splitOn "\n") <$> getContents
- --                shuf <- fastShuffle split 
- --                return $ intercalate "\n" shuf 
- -- mainAux [arg] = readAndEvalFile arg
- -- mainAux _ = die "you wrong"
+ mainAux :: [String] -> IO Program
+ mainAux [] = do 
+                contents <- getContents
+                return $ parsed (parse program contents)
+ mainAux ("-":xs) = do 
+                contents <- getContents
+                return $ parsed (parse program contents)
+ mainAux [arg] = readAndEvalFile arg
+ mainAux _ = die "you wrong"
 
 
  parsed :: Maybe (Program,String) -> Program
@@ -220,11 +218,4 @@
  statementToExpr :: Statement -> Exp 
  statementToExpr (Let x e) = e
  statementToExpr (Expression e) = e
-
- --readAndEvalFile will do that
- ----------- office hours questions
- -- hw 5 - shuffle and main
- -- this, var case for eval??
- -- is parser error enough?
- -- any other errors???? (not unbound variables)
 
