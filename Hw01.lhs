@@ -1,4 +1,4 @@
-sHomework 1.0: Haskell warmup
+Homework 1.0: Haskell warmup
 Due 2016-09-07
 
 Let's learn some Haskell! We'll be going over some rudiments in class,
@@ -116,16 +116,19 @@ and produces one in sorted order. Use the [insertion sort
 algorithm](https://en.wikipedia.org/wiki/Insertion_sort). You might
 want to write a helper function.
 
+
+> grow :: [Int] -> Int -> [Int]
+> grow [] x = [x]
+> grow (y:ys) x 
+>			| x < y =  append [x] (y:ys)
+>			| otherwise = append [y] (grow ys x)
 > insertionSort :: [Int] -> [Int]
 > insertionSort [] = []
-> insertionSort (x:xs) =  insSortAux x:xs []
+> insertionSort (x:xs) =  insSortAux (x:xs) []
 >		where 
 >			insSortAux [] growList = growList
 > 			insSortAux (x:xs) growList = insSortAux xs (grow growList x)
->			grow [] x = x
->			grow (y:ys) x
->					| x < y append [x] (y:ys)
->					| otherwise append [y] grow x:ys
+
 **Problem 4: binary search trees **
 
 Write a function `isBST` to determine whether or not a given tree
@@ -157,13 +160,23 @@ assignment, when we talk about datatypes.
 > maybeBounded (Just lower) (Just upper) x = lower < x && x < upper
 
 > isBST :: IntTree -> Bool
-> isBST = undefined
+> isBST Empty = True
+> isBST (Node l x r) = (isBSTAux l x "left") && (isBSTAux r x "right")
+>	where 
+>		isBSTAux Empty y directon = True 
+>		isBSTAux (Node l y r) x "left" = (maybeBounded Nothing (Just x) y ) && (isBSTAux l y "left") && (isBSTAux r y "right")
+>		isBSTAux (Node l y r) x "right" =  (maybeBounded (Just x) Nothing y) && (isBSTAux l y "left") && (isBSTAux r y "right")
+>
 
 Write a function `insertBST` that performs BST insert. You may
 assume your input is a BST.
 
 > insertBST :: Int -> IntTree -> IntTree
-> insertBST = undefined
+> insertBST x Empty = (Node Empty x Empty)
+> insertBST x (Node l y r) 
+> 			| x < y = Node (insertBST x l) y r 
+>			| otherwise = Node l y (insertBST x r)
+
 
 Write a function `deleteBST` that removes a given value from a
 BST. You may assume your input is a BST. Feel free to look up the
@@ -179,8 +192,21 @@ function works correctly, i.e., for all BSTs `t`:
 
 You are, as always, free to introduce any helper functions you might need.
 
+> isInBST :: Int -> IntTree -> Bool
+> isInBST x Empty = False
+> isInBST x (Node l y r) = (x == y) || isInBST x l || isInBST x r
+> 
+
+
 > deleteBST :: Int -> IntTree -> IntTree
-> deleteBST = undefined
+> deleteBST x Empty = Empty
+> deleteBST y (Node l x r) = 
+>		if isInBST y (Node l x r) 
+>		then deleteBSTAux y (Node l x r) 
+>		else (Node l x r)
+> deleteBSTAux :: Int -> IntTree -> IntTree
+> deleteBSTAux x Empty = Empty
+> deleteBSTAux y (Node l x r) = undefined
 
 **Problem 5: maps and folds**
 

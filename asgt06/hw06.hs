@@ -7,6 +7,12 @@
  import Data.Map (Map)
  import Data.Set (Set)
  import qualified Data.Set as Set
+ import System.Exit
+ import System.Environment
+ import System.Exit
+ import System.IO
+ import Data.Array.IO
+ import Control.Monad
 
 ----------------------------------------------------------
 --Parser things
@@ -124,24 +130,30 @@
                 Nothing -> error "unclosed expression" 
 ------ unbound 2 needs a case for eval a var???????
  peval:: Program -> Store -> (Program,Store)
- pevalAux:: Program -> Store -> (Program,Store) 
- peval l s = pevalAux (reverse l) s
- pevalAux [] s = ([],s)
- pevalAux ((Let x e):xs) s = (fst (pevalAux xs s'), snd (pevalAux xs s')) where s' = Map.insert x (eval e s) s
+ peval [] s = ([],s)
+ peval ((Let x e):xs) s = (fst pA, snd pA) where pA = peval xs (Map.insert x (eval e s) s)
+ peval (Expression e:xs) s = (Expression (eval e s): (fst pA), snd pA) where pA = peval xs s
 
  fv :: Exp -> Store -> Set Varname
  fv (Var x) _ = Set.singleton x
  fv (Lambda x e) s = Set.difference (Set.difference (fv e s) (Set.singleton x)) (Map.keysSet s)
  fv (App e1 e2) s = Set.union (fv e1 s) (fv e2 s)
+
+
+
+
 ----------------------------------------------------------------------------
 --Tests
 
- true', secnd :: Exp
+ true', secnd, false' :: Exp
  true' = (Lambda "n" (Lambda "x" (Var "n")))
+ false' = (Lambda "n" (Lambda "x" (Var "x")))
+ --and' = (Lambda "x" (Lambda "y" (App(App((Var "x") (Var "y")) false'))))
  secnd = (Lambda "x" (Var "x"))
  omega = App (Lambda "x" (App (Var "x") (Var "x"))) (Lambda "x" (App (Var "x") (Var "x")))
 
- store = Map.fromList [("y", true'), ("z", secnd)]
+ store = Map.fromList [("z", true'), ("s", secnd)]
+
 
  test1 = eval (App (App true' secnd) omega) (Map.empty) == Lambda "x" (Var "x") 
 
@@ -149,7 +161,67 @@
 
  unbound2 = App (Lambda "x" (Var "y"))(Lambda "x" (Var "z"))
 
+ p1 = [Let "zero" (Lambda "s" (Lambda "z" (Var "z"))),Let "succ" (Lambda "n" (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Var "n") (Var "s")) (Var "z")))))),Expression (App (Var "succ") (App (Var "succ") (Var "zero"))),Expression (App (Var "succ") (App (Var "succ") (App (Var "succ") (Var "zero"))))]
+ p1out = [Expression (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Lambda "s" (Lambda "z" (Var "z"))) (Var "s")) (Var "z"))))) (Var "s")) (Var "z"))))),Expression (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Lambda "s" (Lambda "z" (Var "z"))) (Var "s")) (Var "z"))))) (Var "s")) (Var "z"))))) (Var "s")) (Var "z")))))]
 
+ p2 = [Let "zero" (Lambda "s" (Lambda "z" (Var "z"))),Let "succ" (Lambda "n" (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Var "n") (Var "s")) (Var "z")))))),Expression (App (Var "succ") (App (Var "succ") (Var "zero")))]
+
+ pevalTest1 = case (parse program "lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z); lambda s z. s ((lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z)) s z)") of 
+              (Just x) -> fst x == fst(peval p1 Map.empty)
+              Nothing -> error "whoops"
+
+ pevalTest2 = case (parse program "lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z)") of 
+              (Just x) -> fst x == fst(peval p2 Map.empty)
+              Nothing -> error "whoops"
+
+ true = Expression $ Lambda "n" ((Lambda "x" (Var "n"))) 
+ false =  Expression $ Lambda "n" ((Lambda "x" (Var "x")))
+ notBool =  Expression $ Lambda "b" (Lambda "x" (Lambda "y" (App (App (Var "b") (Var "x")) (Var "y"))))
+ notFalse = Expression $ App false' (Lambda "b" (Lambda "x" (Lambda "y" (App (App (Var "b") (Var "x")) (Var "y")))))
+ andBoolExp = (Lambda "x" (Lambda "y" (App(App (Var "x") (Var "y")) false')))
+ trueAndFalseProg = Expression $ App (App andBoolExp (true')) false'
+ booltest1 = peval [trueAndFalseProg] Map.empty == peval [false] Map.empty
+
+ main :: IO ()
+ main = do
+          args <- getArgs
+          result <-  (readAndEvalFile (head args))
+          putStrLn (prettyPrint $ (map statementToExpr result))
+          -- putStrLn mainAux args    
+
+ -- mainAux :: [String] -> Program
+ -- mainAux [] = do 
+ --                split <- (splitOn "\n") <$> getContents
+ --                shuf <- fastShuffle split 
+ --                return $ intercalate "\n" shuf 
+ -- mainAux ("-":xs) = do 
+ --                split <- (splitOn "\n") <$> getContents
+ --                shuf <- fastShuffle split 
+ --                return $ intercalate "\n" shuf 
+ -- mainAux [arg] = readAndEvalFile arg
+ -- mainAux _ = die "you wrong"
+
+
+ parsed :: Maybe (Program,String) -> Program
+ parsed (Just x) = fst $ peval (fst x) Map.empty
+ parsed Nothing = error "We cannot ever get here - so parse failed?"
+
+ readAndEvalFile :: FilePath -> IO Program
+ readAndEvalFile f = do
+                    contents <-  readFile f
+                    return $ parsed (parse program contents)
+
+ prettyPrint :: [Exp] -> String
+ prettyPrint ((Lambda a x):ps) = "lambda " ++ a ++ ". ("++(prettyPrint [x]) ++") " ++ (prettyPrint ps)
+ prettyPrint ((App e1 e2):ps) = "(" ++ prettyPrint [e1] ++ ") ("++ prettyPrint [e2] ++ (prettyPrint ps) ++")"
+ prettyPrint ((Var x):ps) = x ++ (prettyPrint ps)
+ prettyPrint [] = ""
+
+ statementToExpr :: Statement -> Exp 
+ statementToExpr (Let x e) = e
+ statementToExpr (Expression e) = e
+
+ --readAndEvalFile will do that
  ----------- office hours questions
  -- hw 5 - shuffle and main
  -- this, var case for eval??
