@@ -118,21 +118,36 @@
  type Store = Map Varname Exp
 
  eval:: Exp ->Store -> Exp
- eval (Lambda x e) s = if ( (fv (Lambda x e) s) == Set.empty) 
-                    then Lambda x e  
-                    else error ("unbound variable " ++ (concat (Set.toAscList (fv (Lambda x e) s))))
-                     
+ eval (Lambda x e) s = Lambda x e  
  eval (App e1 e2) s = eval (subst e1' x e2') s where
                     (Lambda x e1') = eval (e1) s
                     (e2') = eval (e2) s
  eval (Var x) s = case Map.lookup x s of
                 (Just y) -> y
                 Nothing -> error "unclosed expression" 
+
+ evalC:: Exp ->Store -> Exp
+ evalC (Lambda x e) s = if ( (fv (Lambda x e) s) == Set.empty) 
+                    then Lambda x e  
+                    else error ("unbound variable " ++ (concat (Set.toAscList (fv (Lambda x e) s))))
+                     
+ evalC (App e1 e2) s = evalC (subst e1' x e2') s where
+                    (Lambda x e1') = evalC (e1) s
+                    (e2') = evalC (e2) s
+ evalC (Var x) s = case Map.lookup x s of
+                (Just y) -> y
+                Nothing -> error "unclosed expression" 
 ------ unbound 2 needs a case for eval a var???????
+ pevalC:: Program -> Store -> (Program,Store)
+ pevalC [] s = ([],s)
+ pevalC ((Let x e):xs) s = (fst pA, snd pA) where pA = pevalC xs (Map.insert x (evalC e s) s)
+ pevalC (Expression e:xs) s = (Expression (evalC e s): (fst pA), snd pA) where pA = pevalC xs s
+
  peval:: Program -> Store -> (Program,Store)
  peval [] s = ([],s)
  peval ((Let x e):xs) s = (fst pA, snd pA) where pA = peval xs (Map.insert x (eval e s) s)
  peval (Expression e:xs) s = (Expression (eval e s): (fst pA), snd pA) where pA = peval xs s
+
 
  fv :: Exp -> Store -> Set Varname
  fv (Var x) _ = Set.singleton x
@@ -155,7 +170,7 @@
  store = Map.fromList [("z", true'), ("s", secnd)]
 
 
- test1 = eval (App (App true' secnd) omega) (Map.empty) == Lambda "x" (Var "x") 
+ test1 = evalC (App (App true' secnd) omega) (Map.empty) == Lambda "x" (Var "x") 
 
  unbound = Lambda "x" (Var "y")
 
@@ -166,12 +181,12 @@
 
  p2 = [Let "zero" (Lambda "s" (Lambda "z" (Var "z"))),Let "succ" (Lambda "n" (Lambda "s" (Lambda "z" (App (Var "s") (App (App (Var "n") (Var "s")) (Var "z")))))),Expression (App (Var "succ") (App (Var "succ") (Var "zero")))]
 
- pevalTest1 = case (parse program "lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z); lambda s z. s ((lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z)) s z)") of 
-              (Just x) -> fst x == fst(peval p1 Map.empty)
+ pevalCTest1 = case (parse program "lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z); lambda s z. s ((lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z)) s z)") of 
+              (Just x) -> fst x == fst(pevalC p1 Map.empty)
               Nothing -> error "whoops"
 
- pevalTest2 = case (parse program "lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z)") of 
-              (Just x) -> fst x == fst(peval p2 Map.empty)
+ pevalCTest2 = case (parse program "lambda s z. s ((lambda s z. s ((lambda s z. z) s z)) s z)") of 
+              (Just x) -> fst x == fst(pevalC p2 Map.empty)
               Nothing -> error "whoops"
 
  true = Expression $ Lambda "n" ((Lambda "x" (Var "n"))) 
@@ -180,38 +195,56 @@
  notFalse = Expression $ App false' (Lambda "b" (Lambda "x" (Lambda "y" (App (App (Var "b") (Var "x")) (Var "y")))))
  andBoolExp = (Lambda "x" (Lambda "y" (App(App (Var "x") (Var "y")) false')))
  trueAndFalseProg = Expression $ App (App andBoolExp (true')) false'
- booltest1 = peval [trueAndFalseProg] Map.empty == peval [false] Map.empty
+ booltest1 = pevalC [trueAndFalseProg] Map.empty == pevalC [false] Map.empty
+
+ unboundTest1 = peval [Expression $ unbound] Map.empty
+ unboundTest2 = pevalC [Expression $ unbound] Map.empty
 
  main :: IO ()
  main = do
           args <- getArgs
           result <-  mainAux args
-          putStrLn (prettyPrint $ (map statementToExpr result))
+
+          if ("-n" `elem` args || "-cn" `elem` args || "-nc" `elem` args)
+           then putStrLn "nFlag Church Numerals" 
+           else putStrLn ( concat $ prettyPrintSep $ (map statementToExpr result))
           -- putStrLn mainAux args    
 
+
  mainAux :: [String] -> IO Program
- mainAux [] = do 
+ mainAux args = case argsHasFileName args of
+        (Just filename) -> readAndEvalFile hasC hasN filename
+        Nothing -> readfromStdInput hasC hasN 
+        where 
+          hasC = "-c" `elem` args || "-cn" `elem` args || "-nc" `elem` args 
+          hasN = "-n" `elem` args || "-cn" `elem` args || "-nc" `elem` args 
+
+ argsHasFileName :: [String] -> Maybe String
+ argsHasFileName [] = Nothing
+ argsHasFileName (x:xs) = if (head x == '-') && (length x > 1) then argsHasFileName xs else (Just x)
+
+ readfromStdInput:: Bool -> Bool -> IO Program
+ readfromStdInput hasC hasN = do
                 contents <- getContents
-                return $ parsed (parse program contents)
- mainAux ("-":xs) = do 
-                contents <- getContents
-                return $ parsed (parse program contents)
- mainAux [arg] = readAndEvalFile arg
- mainAux _ = die "you wrong"
+                return $ parsedC (parse program contents) hasC
 
 
- parsed :: Maybe (Program,String) -> Program
- parsed (Just x) = fst $ peval (fst x) Map.empty
- parsed Nothing = error "We cannot ever get here - so parse failed?"
+ parsedC :: Maybe (Program,String) -> Bool -> Program
+ parsedC (Just x) isCFlag = if isCFlag then fst $ pevalC (fst x) Map.empty else fst $ peval (fst x) Map.empty
+ parsedC Nothing isCFlag  = error "We cannot ever get here - so parse failed?"
 
- readAndEvalFile :: FilePath -> IO Program
- readAndEvalFile f = do
+ readAndEvalFile ::Bool -> Bool -> FilePath -> IO Program
+ readAndEvalFile hasC hasN f = do
                     contents <-  readFile f
-                    return $ parsed (parse program contents)
+                    return $ parsedC (parse program contents) hasC
+ 
+ prettyPrintSep :: [Exp] -> [String]
+ prettyPrintSep [] = []
+ prettyPrintSep (x:xs) = (prettyPrint [x] ++ "\n") : prettyPrintSep xs  
 
  prettyPrint :: [Exp] -> String
  prettyPrint ((Lambda a x):ps) = "lambda " ++ a ++ ". ("++(prettyPrint [x]) ++") " ++ (prettyPrint ps)
- prettyPrint ((App e1 e2):ps) = "(" ++ prettyPrint [e1] ++ ") ("++ prettyPrint [e2] ++ (prettyPrint ps) ++")"
+ prettyPrint ((App e1 e2):ps) = "(" ++ prettyPrint [e1] ++ ") ("++ prettyPrint [e2]++ ")" ++ (prettyPrint ps) 
  prettyPrint ((Var x):ps) = x ++ (prettyPrint ps)
  prettyPrint [] = ""
 
@@ -219,3 +252,4 @@
  statementToExpr (Let x e) = e
  statementToExpr (Expression e) = e
 
+--todo : church numerals + flags + write factorial  + fix pretty print (weird parenthesis, lambda double args, greek letter if time)

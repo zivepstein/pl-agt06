@@ -1,3 +1,4 @@
-let zero = lambda s z. z;
-let succ = lambda n. lambda s z. (n s z);
-succ (succ (succ zero));
+let        zero = lambda s z       .      z;
+let succ = lambda  n.    lambda  s  z.    (n s z);
+succ (succ     (succ zero));
+succ ( succ zero);
