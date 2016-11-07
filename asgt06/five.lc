@@ -13,4 +13,4 @@ let five = lambda s z. s (s ( s (s (s z))));
 let pred = lambda n. snd (n (lambda p. pair (succ (fst p)) (fst p)) (pair zero zero));
 let Y = lambda f. ((lambda x y. f (x x) y) (lambda x y. f (x x) y));
 let fact = Y (lambda n m. (lambda x factRec.  (isZero m) n factRec (pred m) (mult m n) x));
-fact five one;
+mult five one;
