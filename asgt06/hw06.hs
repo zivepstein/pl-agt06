@@ -158,9 +158,9 @@
  evalNAux (Lambda x e) s = if ( (fv (Lambda x e) s) == Set.empty)    
                     then Lambda x e
                     else error ("unbound variable " ++ (concat (Set.toAscList (fv (Lambda x e) s))))
- evalNAux (App e1 e2) s = evalNAux(subst e1' x e2') s where
-                    (Lambda x e1') = evalNAux(e1) s
-                    (e2') = evalNAux(e2) s
+ evalNAux (App e1 e2) s = case evalNAux(e1) s of
+                        (Lambda x e1') -> evalNAux(subst e1' x (evalNAux(e2) s)) s
+                        (Succ x) -> Succ x
  evalNAux (Var x) s = case Map.lookup x s of
                 (Just y) -> evalN y s
                 Nothing -> error "unclosed expression" 
@@ -303,6 +303,8 @@
  prettyPrintN (Succ x) = 1 + (prettyPrintN x) 
  prettyPrintN (ZeroValue) = 0 
  prettyPrintN (Lambda x e) = prettyPrintN e
+ prettyPrintN (App x y) = -1
+ prettyPrintN (Var x) = -2
 
  statementToExpr :: Statement -> Exp 
  statementToExpr (Let x e) = e
