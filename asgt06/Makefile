@@ -1,2 +1,2 @@
-interp: Hw06.hs 
+interp: hw06.hs 
 	ghc $^ -main-is Hw06.main -o $@

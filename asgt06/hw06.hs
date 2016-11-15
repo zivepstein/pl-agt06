@@ -287,10 +287,12 @@
  
  prettyPrintSep :: [Exp] -> [String]
  prettyPrintSep [] = []
+ prettyPrintSep [x] = [show (prettyPrint [x]) ]
  prettyPrintSep (x:xs) = (prettyPrint [x] ++ "\n") : prettyPrintSep xs 
 
  prettyPrintSepN :: [Exp] -> [String]
  prettyPrintSepN [] = []
+ prettyPrintSepN [x] = [show (prettyPrintN x) ]
  prettyPrintSepN (x:xs) = (show (prettyPrintN x) ++ "\n") : prettyPrintSepN xs   
 
  prettyPrint :: [Exp] -> String
@@ -303,8 +305,8 @@
  prettyPrintN (Succ x) = 1 + (prettyPrintN x) 
  prettyPrintN (ZeroValue) = 0 
  prettyPrintN (Lambda x e) = prettyPrintN e
- prettyPrintN (App x y) = -1
- prettyPrintN (Var x) = -2
+ prettyPrintN (App x y) = error "Your program is not a number"
+ prettyPrintN (Var x) = error "your program is not a number"
 
  statementToExpr :: Statement -> Exp 
  statementToExpr (Let x e) = e
