@@ -86,17 +86,17 @@
  atom = (char '(' *> expr <* char ')') <|> Var <$> var 
 
  app =  App <$> ( atom <* spaceChar) <*> atom <|> atom
- expr = ws *> ((kw "lambda" *> lambdaParser )<|> foldl1 App <$> (sepBy1 app spaceChar) <|> atom)
+ expr = ws *> ((kw "lambda" *> lambdaParser ) <|> foldl1 App <$> (sepBy1 app spaceChar) <|> atom)
  -- <|> Lambda <$> kw "lambda" *> var  <* (satisfy == '.') <*> expr
 
  lambdaParser :: Parser Exp
- lambdaParser = ws *> (Lambda <$> ( var <* (kw ". ")) <*> expr <|> Lambda <$> ( var) <*> lambdaParser)
+ lambdaParser = ws *> (Lambda <$> ((var <* (kw ".")) <* ws) <*> expr <|> Lambda <$> (var) <*> lambdaParser)
 
  data Statement = Let Varname Exp | Expression Exp deriving (Show,Eq)
  type Program = [Statement] 
 
  letParser :: Parser Statement
- letParser = Let <$> ((kw "let" *> var) <* kw "=") <*> expr 
+ letParser = Let <$> (((kw "let" *> var) <* kw "=") <* ws) <*> expr 
 
  statementParser :: Parser Statement
  statementParser = letParser <|> Expression <$> expr 
@@ -128,14 +128,24 @@
                 (Just y) -> eval y s
                 Nothing -> error "unclosed expression" 
 
+ evalStore:: Exp ->Store -> (Exp, Store)
+ evalStore (Lambda x e) s = (Lambda x e, s)  
+ evalStore (App e1 e2) s = evalStore (subst e1' x e2') s where
+                    (Lambda x e1') = fst $ evalStore (e1) s
+                    (e2') = fst $ evalStore (e2) s
+ evalStore (Var x) s = case Map.lookup x s of
+                (Just y) -> evalStore y s
+                Nothing -> error "unclosed expression" 
+
  evalC:: Exp ->Store -> Exp
  evalC (Lambda x e) s = if ( (fv (Lambda x e) s) == Set.empty) 
-                    then Lambda x e  
+                    then Lambda x e 
                     else error ("unbound variable " ++ (concat (Set.toAscList (fv (Lambda x e) s))))
                      
- evalC (App e1 e2) s = evalC (subst e1' x e2') s where
-                    (Lambda x e1') = evalC (e1) s
-                    (e2') = evalC (e2) s
+ evalC (App e1 e2) s =  evalC (subst e1' x e2') s 
+                    where 
+                      (Lambda x e1') = evalC (e1) s
+                      (e2') = evalC (e2) s
  evalC (Var x) s = case Map.lookup x s of
                 (Just y) -> evalC y s
                 Nothing -> error "unclosed expression" 
@@ -167,14 +177,16 @@
  evalNAux ZeroValue s = Lambda "x" ZeroValue
  evalNAux (Succ x) s = Succ (evalNAux x s)
 ------ unbound 2 needs a case for eval a var???????
+
  pevalC:: Program -> Store -> (Program,Store)
  pevalC [] s = ([],s)
  pevalC ((Let x e):xs) s = (fst pA, snd pA) where pA = pevalC xs (Map.insert x (evalC e s) s)
  pevalC (Expression e:xs) s = (Expression (evalC e s): (fst pA), snd pA) where pA = pevalC xs s
 
+
  peval:: Program -> Store -> (Program,Store)
  peval [] s = ([],s)
- peval ((Let x e):xs) s = (fst pA, snd pA) where pA = peval xs (Map.insert x (eval e s) s)
+ peval ((Let x e):xs) s =  (fst pA, snd pA) where pA = peval xs (Map.insert x (eval e s) s)
  peval (Expression e:xs) s = (Expression (eval e s): (fst pA), snd pA) where pA = peval xs s
 
 
@@ -274,7 +286,8 @@
  parsedC Nothing isCFlag  = error "We cannot ever get here - so parse failed?"
 
  parsedN :: Maybe (Program,String) -> Bool -> Program
- parsedN (Just x) isCFlag = let (parsedExpr, store) = peval (fst x) Map.empty in map ((\e -> Expression e) . (\e -> evalN e store) . statementToExpr) parsedExpr
+ parsedN (Just x) isCFlag = let (parsedExpr, store) = peval (fst x) Map.empty in
+                   map ((\e -> Expression e) . (\e -> evalNAux (App (App (fst $ evalStore e store) successor) ZeroValue) (snd $ evalStore e store)) . statementToExpr) parsedExpr
  parsedN Nothing isCFlag  = error "We cannot ever get here - so parse failed?"
 
  readAndEvalFile ::Bool -> Bool -> FilePath -> IO Program
@@ -287,12 +300,12 @@
  
  prettyPrintSep :: [Exp] -> [String]
  prettyPrintSep [] = []
- prettyPrintSep [x] = [show (prettyPrint [x]) ]
+ prettyPrintSep [x] = [prettyPrint [x] ]
  prettyPrintSep (x:xs) = (prettyPrint [x] ++ "\n") : prettyPrintSep xs 
 
  prettyPrintSepN :: [Exp] -> [String]
  prettyPrintSepN [] = []
- prettyPrintSepN [x] = [show (prettyPrintN x) ]
+ prettyPrintSepN [x] = [show (prettyPrintN x)]
  prettyPrintSepN (x:xs) = (show (prettyPrintN x) ++ "\n") : prettyPrintSepN xs   
 
  prettyPrint :: [Exp] -> String
@@ -311,6 +324,5 @@
  statementToExpr :: Statement -> Exp 
  statementToExpr (Let x e) = e
  statementToExpr (Expression e) = e
-
 --todo : church numerals + flags + write factorial  + fix pretty print (weird parenthesis, lambda double args, greek letter if time)
   --todo : church numerals, give some well needed love to prtty print and clean + test
