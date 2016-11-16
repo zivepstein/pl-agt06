@@ -13,12 +13,12 @@ typeGen = elements [NumT , BoolT ]
 
 instance Arbitrary Expr where
   arbitrary = sized $ expr
-    where expr 0 = oneof [Var <$> varName,
-                          (\x t -> Lam x t (Var x)) <$> varName <*> typeGen,
-                          (\x t y -> Lam x t (Lam y t (Var x))) <$> varName <*> typeGen <*> varName,
-                          (\x t y -> Lam x t (Lam y t (Var y))) <$> varName <*> typeGen <*> varName]
+    where expr 0 = oneof [Var <$> varName]
+                          -- (\x t -> Lam x t (Var x)) <$> varName <*> typeGen,
+                          -- (\x t y -> Lam x t (Lam y t (Var x))) <$> varName <*> typeGen <*> varName,
+                          -- (\x t y -> Lam x t (Lam y t (Var y))) <$> varName <*> typeGen <*> varName]
           expr n = oneof [Var <$> varName,
-                          Lam <$> varName <*> typeGen <*> expr (n - 1),
+                          (\x t e -> Lam x t e) <$> varName <*> typeGen <*> expr (n - 1),
                           App <$> expr (n `div` 2) <*> expr (n `div` 2)]
 
 instance Arbitrary Stmt where

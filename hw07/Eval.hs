@@ -10,8 +10,8 @@ data Error =
 
 instance Show Error where
   show (UnboundVariable x) = "unbound variable " ++ x
-  show (AppliedNonFunction e) = "tried to apply non-function in " ++ show e
-  show (SuccNonNat e) = "tried to take successor of a non-natural (bad Church numeral?) in " ++ show e
+  show (AppliedNonFunction e) = "sorry but i tried to apply non-function in " ++ show e
+  show (SuccNonNat e) = "woefully tried to take successor of a non-natural (bad Church numeral?) in " ++ show e
 
 eval :: Expr -> Either Error Expr
 eval (Var x) = Left $ UnboundVariable x

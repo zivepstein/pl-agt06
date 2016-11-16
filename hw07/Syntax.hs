@@ -12,7 +12,7 @@ import Data.List
 
 type VarName = String
 
-data Type = NumT | BoolT | Func Type Type | PairT Type Type deriving (Eq, Show)
+data Type = NumT | BoolT | Func Type Type | PairT Type Type deriving Eq
 data Expr = Var VarName | App Expr Expr | Lam VarName Type Expr 
           | If Expr Expr Expr | LetExp VarName Expr Expr | LetRec VarName Expr Expr | AssignType Expr Type
           | T | F | Num Int 
@@ -31,9 +31,11 @@ instance Show Expr where
         let es = collectApps e in
         intercalate " " $ map (showExpr 1) es
       showExpr 0 (Succ e) = printf "SUCC %s" (showExpr 1 e)
-      showExpr 0 (Lam x t e) =
-        let (e', vars) = collectVars e in
-        printf "lambda %s: %s. %s" (intercalate " " (x:vars)) (show t) (showExpr 0 e')
+      showExpr 0 (Lam x t e) = "lambda " ++ x ++ ":" ++ (show t) ++ ". " ++ (show e)
+        -- let (e', vars) = collectVars e in
+        -- printf "lambda %s: %s. %s" (intercalate " " (x:vars)) (show t) (showExpr 0 e')
+      showExpr 0 (If e1 e2 e3) = "if " ++ (show e1) ++ " then " ++ (show e2) ++ " else " ++ (show e3)
+      showExpr 0 (LetExp v e1 e2) = "let " ++ v ++ "=" ++ (show e1) ++ " in " ++ (show e2)
       showExpr 0 e = showExpr 1 e
       showExpr 1 (Var x) = x
       showExpr 1 Zero = "ZERO"
@@ -50,6 +52,12 @@ instance Show Stmt where
   show (Run e) = printf "%s;" (show e)
 -- parser, using Parsec
 
+instance Show Type where
+  show BoolT = "bool"
+  show NumT = "int"
+  show (Func t1 t2) = show t1 ++ "->" ++ show t2
+  show (PairT t1 t2) = printf "(%s,%s)" (show t1) (show t2)
+
 parseProgram :: String -> Either Text.Parsec.ParseError [Stmt]
 parseProgram = runParser program () "stdin"
 
@@ -62,33 +70,34 @@ parseExpr s =
 parseExpr' :: String -> Either Text.Parsec.ParseError Expr
 parseExpr' = runParser expr () "stdin"
 
-omega = parseExpr "(lambda x:Bool. x x) (lambda x:Bool. x x)"
+omega = parseExpr "(lambda x:bool. x x) (lambda x:bool. x x)"
 
-keywords = ["let","lambda"]
+keywords = ["let","lambda", "if", "then", "else", "in"]
 isKeyword x = x `elem` keywords
 
 program :: Stream s m Char => ParsecT s () m Program
 program = ws *> (stmt `sepEndBy1` symbol ";" <* ws <* eof)
 
 stmt, letStmt :: Stream s m Char => ParsecT s () m Stmt
-stmt = try letStmt <|> Run <$> expr
+stmt = try letStmt <|> Run <$> expr 
 letStmt = Let <$> (kw "let" *> space *> identifier) <*> (symbol "=" *> expr)
 
-expr, atom, lam, var :: Stream s m Char => ParsecT s () m Expr
+expr, atom, lam, var, ifParser, letExpParser :: Stream s m Char => ParsecT s () m Expr
 expr = foldl1 App <$> (atom `sepEndBy1` ws)
-atom = try lam <|> try var <|> parens expr
+atom = try lam <|> try var <|> try ifParser <|> try letExpParser <|> parens expr 
 lam = do
-  ids <- kw "lambda" *> space *> (tidentifier `sepBy1` ws)
+  ids <- try (kw "lambda" *> space *> ((parens tidentifier) `sepBy1` ws))  <|> kw "lambda" *> space *> ( tidentifier `sepBy1` ws)   
   body <- symbol "." *> expr
   pure $ buildLambda body ids
 var = Var <$> identifier
 parens :: Stream s m Char => ParsecT s () m a -> ParsecT s () m a
 parens = between (symbol "(") (symbol ")")
-
+ifParser = If <$> (kw "if" *> expr) <*> (kw "then" *> expr) <*> (kw "else" *> expr)
+letExpParser = LetExp <$> ((kw "let" *> identifier) <* symbol "=" )<*> (expr <* kw "in" )<*> expr
 
 buildLambda :: Expr -> [(String,Type)] -> Expr
 buildLambda body [] = body
-buildLambda body (eyed:eyeds) = buildLambda (Lam (fst eyed) (snd eyed) body) eyeds
+buildLambda body (eyed:eyeds) =  (Lam (fst eyed) (snd eyed) (buildLambda body eyeds)) 
 
 identifier :: Stream s m Char => ParsecT s () m String
 identifier = do
@@ -98,8 +107,9 @@ identifier = do
   then unexpected $ "keyword in place of variable (" ++ x ++ ")"
   else pure x
 
-typeParser :: Stream s m Char => ParsecT s () m Type
-typeParser = ws *> ( pure (NumT) <* kw "int" <|> pure (BoolT) <* kw "bool" <|> Func <$> (typeParser <* kw "->") <*> typeParser)
+typeParser, typeAtom :: Stream s m Char => ParsecT s () m Type
+typeParser = ws *> (try (Func <$> (typeAtom <* symbol "->") <*> typeParser) <|> try (PairT <$> ((symbol "(" *> typeAtom) <* symbol ",") <*> (typeParser <* symbol ")")) <|> typeAtom)
+typeAtom = ws *>  (pure (NumT) <* symbol "int" <|> pure (BoolT) <* symbol "bool")
 
 tidentifier :: Stream s m Char => ParsecT s () m (String,Type)
 tidentifier = (\a b -> (a,b)) <$> identifier <*> (symbol ":" *> typeParser)
