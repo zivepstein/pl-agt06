@@ -3,7 +3,7 @@
 module Syntax where
 
 import Text.Parsec
-
+import Data.Char
 import Control.Monad.Identity
 import Data.Either
 
@@ -14,13 +14,13 @@ type VarName = String
 
 data Type = NumT | BoolT | Func Type Type | PairT Type Type deriving Eq
 data Expr = Var VarName | App Expr Expr | Lam VarName Type Expr 
-          | If Expr Expr Expr | LetExp VarName Expr Expr | LetRec VarName Expr Expr | AssignType Expr Type
+          | If Expr Expr Expr | LetExp VarName Expr Expr | LetRec VarName Type Expr Expr | AssignType Expr Type
           | T | F | Num Int 
           | Pair Expr Expr | UnopExp Unop Expr | BinopExp Binop Expr Expr
           | Zero  | Succ Expr deriving Eq
 
 data Unop = Neg | Not | Fst | Snd deriving Eq
-data Binop = Plus | Minus | Times | Div | And | Or | Equals deriving(Eq, Show)
+data Binop = Plus | Minus | Times | Div | And | Or | Equals deriving(Eq)
 data Stmt = Let VarName Expr | Run Expr | LetR VarName Type Expr deriving Eq
 type Program = [Stmt] 
 
@@ -40,8 +40,12 @@ instance Show Expr where
       showExpr 0 F = "false"
       showExpr 0 (Num n) = show n
       showExpr 0 (UnopExp u v) = show u ++ show v 
+      showExpr 0 (BinopExp u e1 e2) = show e1 ++ show u ++ show e2
+      showExpr 0 (Pair e1 e2) = "(" ++ show e1 ++ "," ++ show e2 ++ ")"
+      showExpr 0 (AssignType e t) = "(" ++ show e ++ ":" ++ show t ++ ")"
+      showExpr 0 (LetRec x t e1 e2) = "let rec " ++ x ++ ":" ++ show t ++ "=" ++ show e1 ++ " in " ++ show  e2
       showExpr 0 e = showExpr 1 e
-      showExpr 1 (Var x) = x
+      showExpr 1 (Var x) = "^" ++ x
       showExpr 1 Zero = "ZERO"
       showExpr 1 e = showExpr 2 e
       showExpr 2 e = printf "(%s)" (showExpr 0 e)
@@ -68,6 +72,16 @@ instance Show Unop where
   show Fst = "fst "
   show Snd = "snd "
 
+instance Show Binop where
+  show Plus = "+"
+  show Times = "*"
+  show Div = "/"
+  show Minus = "-"
+  show And = "&&"
+  show Or = "||"
+  show Equals = "=="
+
+
 parseProgram :: String -> Either Text.Parsec.ParseError [Stmt]
 parseProgram = runParser program () "stdin"
 
@@ -82,7 +96,7 @@ parseExpr' = runParser expr () "stdin"
 
 omega = parseExpr "(lambda x:bool. x x) (lambda x:bool. x x)"
 
-keywords = ["let","lambda", "if", "then", "else", "in", "not", "fst", "snd", "true", "false"]
+keywords = ["let","lambda", "if", "then", "else", "in", "not", "fst", "snd", "true", "false", "rec", "let rec"]
 isKeyword x = x `elem` keywords
 
 program :: Stream s m Char => ParsecT s () m Program
@@ -92,12 +106,13 @@ stmt, letStmt :: Stream s m Char => ParsecT s () m Stmt
 stmt = try letStmt <|> Run <$> expr 
 letStmt = Let <$> (kw "let" *> space *> identifier) <*> (symbol "=" *> expr)
 
-expr, atom, lam, var, ifParser, letExpParser,unopExprParser, boolParser, intParser :: Stream s m Char => ParsecT s () m Expr
+expr, atom, lam, var, ifParser, letExpParser,unopExprParser, boolParser, intParser, pairParser, assignParser,letRecParser :: Stream s m Char => ParsecT s () m Expr
 expr = foldl1 App <$> (atom `sepEndBy1` ws)
-atom = try lam <|> try var <|> try ifParser <|> try letExpParser <|> try unopExprParser <|> parens expr 
+atom = try lam <|> try var <|> try ifParser <|> try letExpParser 
+       <|> try unopExprParser <|> try boolParser <|> try intParser <|> try pairParser <|> try assignParser <|> try letRecParser<|> parens expr 
 lam = do
   ids <- try (kw "lambda" *> space *> ((parens tidentifier) `sepBy1` ws))  <|> kw "lambda" *> space *> ( tidentifier `sepBy1` ws)   
-  body <- symbol "." *> expr
+  body <- symbol "." *> ws *> expr
   pure $ buildLambda body ids
 var = Var <$> identifier
 parens :: Stream s m Char => ParsecT s () m a -> ParsecT s () m a
@@ -105,9 +120,24 @@ parens = between (symbol "(") (symbol ")")
 ifParser = If <$> (kw "if" *> expr) <*> (kw "then" *> expr) <*> (kw "else" *> expr)
 letExpParser = LetExp <$> ((kw "let" *> identifier) <* symbol "=" )<*> (expr <* kw "in" )<*> expr
 unopExprParser = UnopExp <$> unopParser <*> expr
+boolParser = pure T <* kw "true" <|> pure F <* kw "false"
+intParser = Num <$> (ws *> (read <$> many1 (satisfy isDigit)))
+pairParser = Pair <$> (symbol "(" *> expr) <*> ((symbol "," *> expr) <* symbol ")") 
+assignParser = AssignType <$> (symbol "(" *> expr) <*> ((symbol ":" *> typeParser) <* symbol ")") 
+letRecParser = LetRec <$> ((kw "let rec" *> identifier) <* symbol ":") <*> (typeParser <* symbol "=") <*> (expr <* kw "in") <*> expr
+-- binopExpParser =  binopMul `chainl1` binopParserAnd
+-- binopMul = binopFactor `chainl1` binopParserMul
+-- binopFactor = parens binopExpParser <|> expr
+-- (symbol "+" pure (BinopExp Plus))
+  -- (\e1 bi e2 -> BinopExp bi e1 e2) <$> expr <*> binopParserAnd <*> expr
 
 unopParser :: Stream s m Char => ParsecT s () m Unop
 unopParser = pure Not <* kw "not"  <|> pure Neg <* symbol "-"  <|> pure Fst <* kw "fst"  <|> pure Snd <* kw "snd" 
+
+-- binopParserAnd, binopParserMul  :: Stream s m Char => ParsecT s () m Binop
+-- binopParserAnd = pure $ BinopExp Plus <* symbol "+" <|> pure $ BinopExp Minus <* symbol "-" 
+--                <|> pure $ BinopExp Or <* symbol "||" <|> pure $ BinopExp Equals <* symbol "=="
+-- binopParserMul = pure $ BinopExp Times <* symbol "*" <|> pure $ BinopExp Div <* symbol "/" <|> pure $ BinopExp And <* symbol "&&"
 
 buildLambda :: Expr -> [(String,Type)] -> Expr
 buildLambda body [] = body
