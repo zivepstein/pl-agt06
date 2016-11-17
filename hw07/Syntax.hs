@@ -19,7 +19,7 @@ data Expr = Var VarName | App Expr Expr | Lam VarName Type Expr
           | Pair Expr Expr | UnopExp Unop Expr | BinopExp Binop Expr Expr
           | Zero  | Succ Expr deriving Eq
 
-data Unop = Neg | Not | Fst | Snd deriving(Eq, Show)
+data Unop = Neg | Not | Fst | Snd deriving Eq
 data Binop = Plus | Minus | Times | Div | And | Or | Equals deriving(Eq, Show)
 data Stmt = Let VarName Expr | Run Expr | LetR VarName Type Expr deriving Eq
 type Program = [Stmt] 
@@ -36,6 +36,10 @@ instance Show Expr where
         -- printf "lambda %s: %s. %s" (intercalate " " (x:vars)) (show t) (showExpr 0 e')
       showExpr 0 (If e1 e2 e3) = "if " ++ (show e1) ++ " then " ++ (show e2) ++ " else " ++ (show e3)
       showExpr 0 (LetExp v e1 e2) = "let " ++ v ++ "=" ++ (show e1) ++ " in " ++ (show e2)
+      showExpr 0 T = "true"
+      showExpr 0 F = "false"
+      showExpr 0 (Num n) = show n
+      showExpr 0 (UnopExp u v) = show u ++ show v 
       showExpr 0 e = showExpr 1 e
       showExpr 1 (Var x) = x
       showExpr 1 Zero = "ZERO"
@@ -58,6 +62,12 @@ instance Show Type where
   show (Func t1 t2) = show t1 ++ "->" ++ show t2
   show (PairT t1 t2) = printf "(%s,%s)" (show t1) (show t2)
 
+instance Show Unop where
+  show Not = "not "
+  show Neg = "-"
+  show Fst = "fst "
+  show Snd = "snd "
+
 parseProgram :: String -> Either Text.Parsec.ParseError [Stmt]
 parseProgram = runParser program () "stdin"
 
@@ -72,7 +82,7 @@ parseExpr' = runParser expr () "stdin"
 
 omega = parseExpr "(lambda x:bool. x x) (lambda x:bool. x x)"
 
-keywords = ["let","lambda", "if", "then", "else", "in"]
+keywords = ["let","lambda", "if", "then", "else", "in", "not", "fst", "snd", "true", "false"]
 isKeyword x = x `elem` keywords
 
 program :: Stream s m Char => ParsecT s () m Program
@@ -82,9 +92,9 @@ stmt, letStmt :: Stream s m Char => ParsecT s () m Stmt
 stmt = try letStmt <|> Run <$> expr 
 letStmt = Let <$> (kw "let" *> space *> identifier) <*> (symbol "=" *> expr)
 
-expr, atom, lam, var, ifParser, letExpParser :: Stream s m Char => ParsecT s () m Expr
+expr, atom, lam, var, ifParser, letExpParser,unopExprParser, boolParser, intParser :: Stream s m Char => ParsecT s () m Expr
 expr = foldl1 App <$> (atom `sepEndBy1` ws)
-atom = try lam <|> try var <|> try ifParser <|> try letExpParser <|> parens expr 
+atom = try lam <|> try var <|> try ifParser <|> try letExpParser <|> try unopExprParser <|> parens expr 
 lam = do
   ids <- try (kw "lambda" *> space *> ((parens tidentifier) `sepBy1` ws))  <|> kw "lambda" *> space *> ( tidentifier `sepBy1` ws)   
   body <- symbol "." *> expr
@@ -94,6 +104,10 @@ parens :: Stream s m Char => ParsecT s () m a -> ParsecT s () m a
 parens = between (symbol "(") (symbol ")")
 ifParser = If <$> (kw "if" *> expr) <*> (kw "then" *> expr) <*> (kw "else" *> expr)
 letExpParser = LetExp <$> ((kw "let" *> identifier) <* symbol "=" )<*> (expr <* kw "in" )<*> expr
+unopExprParser = UnopExp <$> unopParser <*> expr
+
+unopParser :: Stream s m Char => ParsecT s () m Unop
+unopParser = pure Not <* kw "not"  <|> pure Neg <* symbol "-"  <|> pure Fst <* kw "fst"  <|> pure Snd <* kw "snd" 
 
 buildLambda :: Expr -> [(String,Type)] -> Expr
 buildLambda body [] = body

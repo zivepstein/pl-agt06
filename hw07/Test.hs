@@ -1,9 +1,13 @@
 module Test where
 
 import Syntax
+import Eval
 import Text.Parsec
 
 import Test.QuickCheck
+
+import qualified Data.Map as Map
+import Data.Map (Map)
 
 varName :: Gen String
 varName = elements (map (:[]) ['a'..'z'])
@@ -29,3 +33,19 @@ prop_prettyParse e = parseExpr' (show e) === Right e
 
 prop_prettyParsePretty :: Expr -> Property
 prop_prettyParsePretty e = show (parseExpr (show e)) === show e
+
+ctxt = Map.fromList[("x", NumT), ("y", NumT), ("b", BoolT)] :: G
+
+expr1 :: Expr
+expr1 = Lam "x" NumT (T)
+expr2 = App expr1 (Num 9)
+expr3 = LetExp "x" expr2 (App (Lam "y" BoolT (Var "y")) (Var "x"))
+expr4 = UnopExp Not expr3
+
+
+
+
+
+
+
+
