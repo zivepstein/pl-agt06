@@ -3,27 +3,41 @@ module Test where
 import Syntax
 import Eval
 import Text.Parsec
-
-import Test.QuickCheck
-
 import qualified Data.Map as Map
 import Data.Map (Map)
 
+import Test.QuickCheck
+
 varName :: Gen String
 varName = elements (map (:[]) ['a'..'z'])
+
+unop :: Gen Unop 
+unop = elements [Not, Fst, Snd, Neg]
+
+binop :: Gen Binop
+binop = elements [Times, Plus, Div, Minus, Equals, And, Or]
 
 typeGen :: Gen Type
 typeGen = elements [NumT , BoolT ]
 
 instance Arbitrary Expr where
   arbitrary = sized $ expr
-    where expr 0 = oneof [Var <$> varName]
-                          -- (\x t -> Lam x t (Var x)) <$> varName <*> typeGen,
-                          -- (\x t y -> Lam x t (Lam y t (Var x))) <$> varName <*> typeGen <*> varName,
-                          -- (\x t y -> Lam x t (Lam y t (Var y))) <$> varName <*> typeGen <*> varName]
+    where expr 0 = oneof [Var <$> varName,
+                          (\x t -> Lam x t (Var x)) <$> varName <*> typeGen,
+                          (\x t y -> Lam x t (Lam y t (Var x))) <$> varName <*> typeGen <*> varName,
+                          (\x t y -> Lam x t (Lam y t (Var y))) <$> varName <*> typeGen <*> varName]
           expr n = oneof [Var <$> varName,
-                          (\x t e -> Lam x t e) <$> varName <*> typeGen <*> expr (n - 1),
-                          App <$> expr (n `div` 2) <*> expr (n `div` 2)]
+                          Lam <$> varName <*> typeGen <*> expr (n - 1),
+                          App <$> expr (n `div` 2) <*> expr (n `div` 2), 
+                          If <$> expr (n `div` 3) <*> expr (n `div` 3) <*> expr (n `div` 3),
+                          UnopExp <$> unop <*> expr (n-1),
+                          LetExp <$> varName <*> expr (n `div` 2) <*> expr (n `div` 2),
+                           pure T, pure F,
+                          LetRec  <$> varName <*> typeGen <*> expr (n `div` 2) <*> expr (n `div` 2),
+                          AssignType <$> expr (n-1) <*> typeGen, 
+                          Pair <$> expr (n `div` 2) <*> expr (n `div` 2),
+                          BinopExp <$> binop <*> expr (n `div` 2) <*> expr (n `div` 2)
+                          ]
 
 instance Arbitrary Stmt where
   arbitrary = oneof [Let <$> varName <*> arbitrary, Run <$> arbitrary]
@@ -61,11 +75,16 @@ test4 = eval expr8 == Right (Num 2)
 test5 = eval expr12 == Right (Pair (Num 8) T)
 test6 = eval expr13 == Right (Num 8)
 
+
 tests = [test1, test2, test3, test4, test5, test6]
 
 
+
 --Questions: binop order stuff, chainl, assigntype and type of, let rec evaluating, not show functions
+-- lambda x:int .x fails, is this ok 
+
 
 --Todo: gut c and n, add unsafe flag, more tests, fact 5, not show functions (change level of show instance for lambda)
+
 
 

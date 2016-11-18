@@ -53,6 +53,7 @@ typeOf g e@(BinopExp Equals e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == Nu
         (if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else error $ show (PoorlyTypedExpression e))
 typeOf g e@(BinopExp And e1 e2) = if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else error $ show (PoorlyTypedExpression e)
 typeOf g e@(BinopExp Or e1 e2) = if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else error $ show (PoorlyTypedExpression e)
+typeOf g e@(AssignType e1 t) = if typeOf g e1 == t then t else error $ show (PoorlyTypedExpression e)
 
 eval :: Expr -> Either Error Expr
 eval (Var x) = Left $ UnboundVariable x
