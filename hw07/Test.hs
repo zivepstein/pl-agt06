@@ -2,6 +2,7 @@ module Test where
 
 import Syntax
 import Eval
+import Main
 import Text.Parsec
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -75,13 +76,14 @@ test4 = eval expr8 == Right (Num 2)
 test5 = eval expr12 == Right (Pair (Num 8) T)
 test6 = eval expr13 == Right (Num 8)
 
+testLR1 = "let rec toZero: int->int = (lambda n:int. if (n==0) then 0 else (toZero (n-1))) in (toZero 5)"
+
 
 tests = [test1, test2, test3, test4, test5, test6]
 
 
 
---Questions: binop order stuff, chainl, assigntype and type of, let rec evaluating, not show functions
--- lambda x:int .x fails, is this ok 
+--Questions:  let rec evaluating, not show functions
 
 
 --Todo: gut c and n, add unsafe flag, more tests, fact 5, not show functions (change level of show instance for lambda)

@@ -3,7 +3,7 @@ module Eval where
 import Syntax
 import qualified Data.Map as Map
 import Data.Map (Map)
-data Error =
+data Err =
     UnboundVariable VarName
   | AppliedNonFunction Expr
   | SuccNonNat Expr
@@ -12,7 +12,7 @@ data Error =
 
 type G = Map VarName Type
 
-instance Show Error where
+instance Show Err where
   show (UnboundVariable x) = "unbound variable " ++ x
   show (AppliedNonFunction e) = "sorry but i tried to apply non-function in " ++ show e
   show (SuccNonNat e) = "woefully tried to take successor of a non-natural (bad Church numeral?) in " ++ show e
@@ -21,17 +21,17 @@ instance Show Error where
 typeOf :: G -> Expr -> Type 
 typeOf g (Var x) = case Map.lookup x g of
                 (Just y) -> y
-                Nothing -> error "untyped variable" 
+                Nothing -> Err "untyped variable" 
 typeOf g T = BoolT
 typeOf g F = BoolT 
 typeOf g (If e1 e2 e3) = case (typeOf g e1,typeOf g e2,typeOf g e3) of
-                      (BoolT, t1,t2) -> if t1 == t2 then t2 else error "cases of if statement must match in type" 
-                      (_,_,_) -> error "poorly typed if expression"
+                      (BoolT, t1,t2) -> if t1 == t2 then t2 else Err "cases of if statement must match in type" 
+                      (_,_,_) -> Err "poorly typed if expression"
 typeOf g e@(App e1 e2) = 
   case t1 of
     Func t11 t12 | t11 == t2 -> t12
-    Func t11 t12 -> error "mismatch"
-    _ -> error "expected function"
+    Func t11 t12 -> Err "mismatch"
+    _ -> Err "expected function"
  where
   t1 = typeOf g e1
   t2 = typeOf g e2
@@ -39,23 +39,23 @@ typeOf g (Lam x t e) = Func t (typeOf (Map.insert x t g) e)
 typeOf g (LetExp x e1 e2) = typeOf (Map.insert x (typeOf g e1) g) e2
 typeOf g (Num x) = NumT
 typeOf g (Pair e1 e2) = PairT (typeOf g e1) (typeOf g e2)
-typeOf g p@(LetRec x t e1 e2) = if (typeOf (Map.insert x t g) e1) == t then typeOf (Map.insert x t g) e2 else error $ show (PoorlyTypedExpression p) 
+typeOf g p@(LetRec x t e1 e2) = if (typeOf (Map.insert x t g) e1) == t then typeOf (Map.insert x t g) e2 else Err $ show (PoorlyTypedExpression p) 
 -- typeOf g (AssignType e t) = if typeOf g e
-typeOf g (UnopExp Not e) = if typeOf g e == BoolT then BoolT else error $ show (PoorlyTypedExpression (UnopExp Not e))
-typeOf g (UnopExp Neg e) = if typeOf g e == NumT then NumT else error $ show (PoorlyTypedExpression (UnopExp Neg e))
+typeOf g (UnopExp Not e) = if typeOf g e == BoolT then BoolT else Err $ show (PoorlyTypedExpression (UnopExp Not e))
+typeOf g (UnopExp Neg e) = if typeOf g e == NumT then NumT else Err $ show (PoorlyTypedExpression (UnopExp Neg e))
 typeOf g (UnopExp Fst (Pair e1 e2)) = typeOf g e1
 typeOf g (UnopExp Snd (Pair e1 e2)) = typeOf g e2
-typeOf g e@(BinopExp Plus e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else error $ show (PoorlyTypedExpression e)
-typeOf g e@(BinopExp Minus e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else error $ show (PoorlyTypedExpression e)
-typeOf g e@(BinopExp Times e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else error $ show (PoorlyTypedExpression e)
-typeOf g e@(BinopExp Div e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else error $ show (PoorlyTypedExpression e)
+typeOf g e@(BinopExp Plus e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else Err $ show (PoorlyTypedExpression e)
+typeOf g e@(BinopExp Minus e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else Err $ show (PoorlyTypedExpression e)
+typeOf g e@(BinopExp Times e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else Err $ show (PoorlyTypedExpression e)
+typeOf g e@(BinopExp Div e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else Err $ show (PoorlyTypedExpression e)
 typeOf g e@(BinopExp Equals e1 e2) = if typeOf g e1 == NumT && typeOf g e2 == NumT then NumT else 
-        (if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else error $ show (PoorlyTypedExpression e))
-typeOf g e@(BinopExp And e1 e2) = if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else error $ show (PoorlyTypedExpression e)
-typeOf g e@(BinopExp Or e1 e2) = if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else error $ show (PoorlyTypedExpression e)
-typeOf g e@(AssignType e1 t) = if typeOf g e1 == t then t else error $ show (PoorlyTypedExpression e)
+        (if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else Err $ show (PoorlyTypedExpression e))
+typeOf g e@(BinopExp And e1 e2) = if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else Err $ show (PoorlyTypedExpression e)
+typeOf g e@(BinopExp Or e1 e2) = if typeOf g e1 == BoolT && typeOf g e2 == BoolT then BoolT else Err $ show (PoorlyTypedExpression e)
+typeOf g e@(AssignType e1 t) = if typeOf g e1 == t then t else Err $ show (PoorlyTypedExpression e)
 
-eval :: Expr -> Either Error Expr
+eval :: Expr -> Either Err Expr
 eval (Var x) = Left $ UnboundVariable x
 eval e@(Lam _ _ _) = Right $ e
 eval e@(App e1 e2) = do
@@ -81,7 +81,10 @@ eval p@(AssignType e t) = if typeOf Map.empty e == t then eval e else Left $ Poo
 eval (Num x) = Right (Num x)
 eval T = Right T
 eval F = Right F
---eval (LetRec x e1 e2) = 
+--eval (LetRec x t e1 e2) = eval (subst v x e2) where v = subst (LetRec x t e1 e2) x  e1
+eval (LetRec x t e1 e2) = case (eval (App (Lam x t e1) (e1))) of 
+                        Right e -> eval $ App (Lam x t e2) e
+                        Left e -> Left e
 eval (UnopExp Not e) = case eval e of
                 Right T -> Right F
                 Right F -> Right T
@@ -150,7 +153,9 @@ subst eX x (UnopExp u e) = UnopExp u (subst eX x e)
 subst eX x (BinopExp u e1 e2) = BinopExp u (subst eX x e1) (subst eX x e2)
 subst eX x (Pair e1 e2) = Pair (subst eX x e1) (subst eX x e2)
 subst eX x (AssignType e1 t) = AssignType (subst eX x e1) t
-
+subst eX x e@(LetRec y t e1 e2) = if y == x then e else LetRec y t (subst eX x e1) (subst eX x e2)
+subst eX x (If e1 e2 e3) = If (subst eX x e1) (subst eX x e2) (subst eX x e3)
+ 
 
 substS :: Expr -> VarName -> Stmt -> Stmt
 substS eX x s@(Let y e) = if x == y then s else Let y $ subst eX x e

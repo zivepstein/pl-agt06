@@ -6,7 +6,8 @@ import Syntax
 import Text.Parsec
 import Eval
 import Check
-
+import qualified Data.Map as Map
+import Data.Map (Map)
 import System.Environment
 import System.Exit
 import System.IO
@@ -28,7 +29,7 @@ arguments =
     "interp" [("file","-")]
     "lambda calculus interpreter"
     (flagArg (upd "file") "FILE (defaults to -, for stdin)")
-    [flagNone ["check","c"] (flag "check") "Check scope",
+    [flagNone ["check","u"] (flag "check") "Check scope",
      flagNone ["numeral","n"] (flag "numeral")
        "Convert final Church numeral to a number",
      flagHelpSimple (flag "help")]
@@ -48,7 +49,7 @@ main = do
 configure :: Conf -> [(String,String)] -> Conf
 configure = foldr update
   where update ("check",_) c = c{ checkScope = True }
-        update ("numeral",_) c = c{ toNum = True }
+        update ("numeral",_) c = c{ toNum = False }
         update ("file",f) c = c{ source = f }
 
 parseText :: Conf -> String -> IO Program
@@ -66,12 +67,29 @@ loadFile (Conf {source=file}) = do
   else failWith $ "No such file '" ++ file ++ "'"
 
 check :: Conf -> Program -> IO Program
-check (Conf {checkScope=False}) prog = pure prog
-check (Conf {checkScope=True}) prog = do
-  let fvs = fvProgram Set.empty prog
-  if Set.null fvs
-    then pure prog
-    else failWith $ "Unbound variables: " ++ intercalate ", " (Set.toList fvs)
+check (Conf {checkScope=True}) prog = pure prog
+check (Conf {checkScope=False}) prog = 
+  let hasErr = foldr (\a b -> a ||b) False (validateErr . (typeOf  Map.empty) . statementToExpr <$> subster prog) in 
+  if hasErr 
+                                       then failWith "Type error friend. Please try again." 
+                                       else pure prog
+
+subster :: Program -> Program
+subster [] =  []
+subster (Let x e:ss) = subster $ map (substS e x) ss
+subster (Run e:ss) = subster ss
+
+validateErr :: Type -> Bool
+validateErr NumT = False
+validateErr BoolT = False
+validateErr (Err s) = True
+validateErr (PairT t1 t2) = (validateErr t1) || (validateErr t2)
+validateErr (Func t1 t2) = (validateErr t1) || (validateErr t2)
+--typeOf Map.empty $ parseExpr "lambda x:int. x and 3"
+
+statementToExpr :: Stmt -> Expr 
+statementToExpr (Let x e) = e
+statementToExpr (Run e) = e 
 
 run :: Program -> IO [Expr]
 run [] = pure []
