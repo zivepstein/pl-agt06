@@ -82,9 +82,7 @@ eval (Num x) = Right (Num x)
 eval T = Right T
 eval F = Right F
 --eval (LetRec x t e1 e2) = eval (subst v x e2) where v = subst (LetRec x t e1 e2) x  e1
-eval (LetRec x t e1 e2) = case (eval (App (Lam x t e1) (e1))) of 
-                        Right e -> eval $ App (Lam x t e2) e
-                        Left e -> Left e
+eval (LetRec x t e1 e2) = eval (subst v x e2) where v = subst (LetRec x t e1 (Var x)) x  e1
 eval (UnopExp Not e) = case eval e of
                 Right T -> Right F
                 Right F -> Right T
