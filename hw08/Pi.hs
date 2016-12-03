@@ -110,10 +110,13 @@ type Gamma = Map Name Typ
 
 typeExp :: Gamma -> Exp -> Either String Typ
 typeExp g (EVar n) = maybe2Either n g
-typeExp g (ETup []) = Right (TTup [])
-typeExp g (ETup (n:ns)) = case ((:) <$> (maybe2Either n g) <*> typeExp g (ETup ns)) of
-                          (Left e) -> Left Exp
-                          (Right ls) -> Right $ TTup ls
+typeExp g (ETup ls) = Right (TTup $ typeExpAux g ls)
+
+typeExpAux :: Gamma -> [Exp] -> [Typ]
+typeExpAux g [] = []
+typeExpAux g (e:es) = case typeExp g e of
+                  Right t -> t : (typeExpAux g es)
+                  Left s -> error "with with finding types in ttup"
 
 maybe2Either :: Name -> Gamma -> Either String Typ
 maybe2Either n g = case Map.lookup n g of 
@@ -121,7 +124,14 @@ maybe2Either n g = case Map.lookup n g of
                     (Just t) -> Right t
 
 typePat :: Gamma -> Pattern -> Typ -> Either String Gamma
-typePat = undefined
+typePat gamma (PVar []) (TTup []) = Right gamma
+typePat gamma (PVar n) v = Right (Map.insert n v gamma)
+typePat gamma Wild v = Right gamma
+typePat gamma (PTup ((PVar n):ns)) (TTup (t:ts)) = if length ns == length ts 
+                                     then case (typePat gamma (PTup ns) (TTup ts)) of
+                                      Right g -> Right $ Map.union (Map.insert n t gamma) g
+                                      Left s -> error "pattern typing failed for remaining list"
+                                     else error "you fucked up"
 
 checkPi :: Gamma -> Pi -> Either String ()
 checkPi = undefined
@@ -144,14 +154,12 @@ type Env = Map Name Value
 -- evalPat env p v
 -- match a value v against a pattern p and extend environment env
 evalPat :: Env -> Pattern -> Value -> Env
+evalPat gamma (PVar []) (VTup []) = gamma
 evalPat gamma (PVar n) v = (Map.insert n v gamma)
 evalPat gamma Wild v = gamma
-evalPat gamma (PVar []) (VTup []) = gamma
 evalPat gamma (PTup ((PVar n):ns)) (VTup (v:vs)) = if length ns == length vs 
                                      then Map.union (Map.insert n v gamma) (evalPat gamma (PTup ns) (VTup vs)) 
                                      else error "you fucked up"
-
-
 -- evalExp env e
 -- evaluates e to a value in environment env
 evalExp :: Env -> Exp -> Value
@@ -160,9 +168,40 @@ evalExp env (ETup es) = VTup (evalExps env es)
   where
     evalExps env [] = []
     evalExps env (e:es) = evalExp env e : evalExps env es
-
+--TODO: if we send more things to the channel than we read out no error is thrown / they're just ignored. Is this chill?
 run :: Env -> Pi -> IO ()
-run = undefined
+run env Nil = pure ()
+run env (p1 :|: p2) = case p1 of
+                (Inp name pat p) ->  do{ y <- run env (send2back p1 p2); return ()}
+                (RepInp name pat p) ->  do{ y <- run env (send2back p1 p2); return ()}
+                _ ->  do{ x <- run env p1;y <- run env p2; return ()}
+run env (New name t p) = let newN = (newName env) in do{c <- newChan; n <- pure newN; run (Map.insert name (VChan c) env) p}
+run env (Out name e) =  case  Map.lookup name env of 
+                   (Just (VChan c)) -> writeChan c (evalExp env e)
+                   (Just (VTup c)) -> error "can't send on multiple channels"
+                   Nothing -> error "no such channel"
+run env (Inp name pat p) = do{
+            r <- readChan (dvchan (env ! name));
+            env' <- pure (evalPat env pat r) ;
+            run env' p}
+run env (RepInp name pat p) =  case readChan (dvchan (env ! name)) of
+          (x) -> do {r<- x; env' <- pure (evalPat env pat r); run env' (p :|: RepInp name pat p) }
+          
+run env (Embed f p) = do{x <- f env; run env p}
+
+send2back :: Pi -> Pi -> Pi
+send2back p1 (p2a :|: p2b) = p2a :|: (send2back p1 p2b)
+send2back p1 x = x :|: p1
+
+subst :: Pi -> Name -> Name -> Pi
+subst p n1 n2 = undefined
+
+dvchan :: Value -> Chan Value
+dvchan (VChan c) = c
+dvchan (VTup ls) = error "yo cant send on multiple channels"
+
+newName :: Env -> Name
+newName env = if length (Map.keys env) == 0 then "1" else concat (Map.keys env) 
 
 start :: Pi -> IO ()
 start p = run Map.empty p
