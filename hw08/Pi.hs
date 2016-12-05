@@ -134,7 +134,23 @@ typePat gamma (PTup ((PVar n):ns)) (TTup (t:ts)) = if length ns == length ts
                                      else error "you fucked up"
 
 checkPi :: Gamma -> Pi -> Either String ()
-checkPi = undefined
+checkPi g Nil = Right ()
+checkPi g (p1 :|: p2) = case (checkPi p1, checkPi p2) of
+                      (Right (), Right ()) -> Right ()
+                      _ -> Left "molly said u fucked up"
+checkPi g (New name t p) = checkPi (Map.insert name t g) p
+checkPi g (Out name e) = case (g ! name,typeExp e) of
+                    (TChan t, Right t) -> Right ()
+                    _ -> Left "merp"
+checkPi g (Inp name pat p) = case (typePat g pat (g! name), checkPi g p) of
+                    (Right g1, Right ()) -> Right ()
+                    _ -> Left "input pattern failed to type check..... >:("
+checkPi g (RepInp name pat p) = case (typePat g pat (g! name), checkPi g p) of
+                    (Right g1, Right ()) -> Right ()
+                    _ -> Left "repInput pattern failed to type check..... >:{o"
+checkPi g (Embed f p) = checkPi g p
+              
+
 
 check :: Pi -> Either String ()
 check p = checkPi Map.empty p
@@ -171,10 +187,10 @@ evalExp env (ETup es) = VTup (evalExps env es)
 --TODO: if we send more things to the channel than we read out no error is thrown / they're just ignored. Is this chill?
 run :: Env -> Pi -> IO ()
 run env Nil = pure ()
-run env (p1 :|: p2) = case p1 of
-                (Inp name pat p) ->  do{ y <- run env (send2back p1 p2); return ()}
-                (RepInp name pat p) ->  do{ y <- run env (send2back p1 p2); return ()}
-                _ ->  do{ x <- run env p1;y <- run env p2; return ()}
+run env (p1 :|: p2) = case p2 of
+                (Inp name pat p) ->  do{ y <- run env (send2front p2 p1); return ()}
+                (RepInp name pat p) ->  do{ y <- run env (send2front p2 p1); return ()}
+                _ ->  do{ x <- run env p2;y <- run env p1; return ()}
 run env (New name t p) = let newN = (newName env) in do{c <- newChan; n <- pure newN; run (Map.insert name (VChan c) env) p}
 run env (Out name e) =  case  Map.lookup name env of 
                    (Just (VChan c)) -> writeChan c (evalExp env e)
@@ -184,14 +200,16 @@ run env (Inp name pat p) = do{
             r <- readChan (dvchan (env ! name));
             env' <- pure (evalPat env pat r) ;
             run env' p}
-run env (RepInp name pat p) =  case readChan (dvchan (env ! name)) of
-          (x) -> do {r<- x; env' <- pure (evalPat env pat r); run env' (p :|: RepInp name pat p) }
+run env (RepInp name pat p) =  do {
+            r<- readChan (dvchan (env ! name));
+            env' <- pure (evalPat env pat r);
+            run env' (p :|: RepInp name pat p)}
           
 run env (Embed f p) = do{x <- f env; run env p}
 
-send2back :: Pi -> Pi -> Pi
-send2back p1 (p2a :|: p2b) = p2a :|: (send2back p1 p2b)
-send2back p1 x = x :|: p1
+send2front :: Pi -> Pi -> Pi
+send2front p1 (p2a :|: p2b) =  (send2front p1 p2a) :|: p2b
+send2front p1 x = p1 :|: x
 
 subst :: Pi -> Name -> Name -> Pi
 subst p n1 n2 = undefined
@@ -205,3 +223,16 @@ newName env = if length (Map.keys env) == 0 then "1" else concat (Map.keys env)
 
 start :: Pi -> IO ()
 start p = run Map.empty p
+
+rev :: Pi -> Pi
+rev (p1 :|: p2) = (p2 :|: rev p1)
+rev x = x
+
+
+
+-----For young natalie to ask young campbell:
+      ---help with eval (:|: order of operations)
+      ---run(file="theory.txt", mentor=eric_campbell);
+      ---big picture booleans - how might we implement these??????????????
+      ---new name business -> substituation, must we come up with a new name? does this make any sense? what is life?
+      ---all the answers, plz

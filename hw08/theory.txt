@@ -1,3 +1,27 @@
 Typing Rules for the Pi Calculus
 
 Please use ASCII notation for inference rules, like in the lecture notes.
+
+G |- e1 : chan t      G |- e2 : t
+----------------------------------
+          G |- send e1(e2)
+
+G |- p1       G |- p2
+----------------------
+       G |- p1|p2
+
+
+-------
+G |- 0
+
+G |- e : chan t1       |- pat :t1 |> G'     G,G' |- p
+------------------------------------------------------
+G |- rec e(pat).p
+
+G |- e : chan t1       |- pat :t1 |> G'     G,G' |- p
+------------------------------------------------------
+G |- rec! e(pat).p
+
+  G,x:t |- p 
+----------------
+G |- new x:t.p

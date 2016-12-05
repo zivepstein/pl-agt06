@@ -22,11 +22,12 @@ test2andahalf =
 
 test3 =
   New n unitT $
-  (RepInp n (PVar i) test1) :|: (Out n unitE) :|: (Out n unitE):|: (Out n unitE)
+    (RepInp n (PVar i) test1) :|: (Out n unitE) :|: (Out n unitE):|: (Out n unitE) 
+
 
 test3andahalf =
   New n unitT $
-  (Out n unitE) :|: (Out n unitE):|: (Inp n (PVar i) test1') :|: (Inp n (PVar i) test1') :|: (Inp n (PVar i) test1) 
+  (Out n unitE) :|: (Out n unitE) :|: (Inp n (PVar i) test1') :|: (Inp n (PVar i) test1') :|: (Inp n (PVar i) test1) 
 
 rep n pi | n <= 0 = Nil
 rep n pi | n > 0  = pi :|: rep (n-1) pi
