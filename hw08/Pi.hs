@@ -116,7 +116,7 @@ typeExpAux :: Gamma -> [Exp] -> [Typ]
 typeExpAux g [] = []
 typeExpAux g (e:es) = case typeExp g e of
                   Right t -> t : (typeExpAux g es)
-                  Left s -> error $ "with with finding types in ttup: " ++ (show g) ++" trying to find " ++ (show e)
+                  Left s -> error $ s++ " with with finding types in ttup: " ++ (show g) ++" trying to find " ++ (show e)
 
 maybe2Either :: Name -> Gamma -> Either String Typ
 maybe2Either n g = case Map.lookup n g of 
@@ -131,7 +131,7 @@ typePat gamma (PTup ((Wild):ns)) (TTup (t:ts)) = if length ns == length ts
                                      then case (typePat gamma (PTup ns) (TTup ts)) of
                                       Right g -> Right $ Map.union gamma g
                                       Left s -> error "pattern typing failed for remaining list"
-                                     else error "you fucked up"
+                                     else error "you fucked up"     
 typePat gamma (PTup ((PVar n):ns)) (TTup (t:ts)) = if length ns == length ts 
                                      then case (typePat gamma (PTup ns) (TTup ts)) of
                                       Right g -> Right $ Map.union (Map.insert n t gamma) g
@@ -142,23 +142,29 @@ typePat gamma p v = error $ "you did something wrong pattern and types are......
 
 checkPi :: Gamma -> Pi -> Either String ()
 checkPi g Nil = Right ()
-checkPi g (p1 :|: p2) = case (checkPi g p1, checkPi g p2) of
-                      (Right y, Right x )-> Right ()
-                      (Right y, Left x) ->Left x
-                      (Left y, _) -> Left y
-checkPi g (New name t p) = checkPi (Map.insert name t g) p
+checkPi g (p1 :|: p2) = checkPi g p1 *> checkPi g p2
+  -- case (checkPi g p1, checkPi g p2) of
+  --                     (Right y, Right x )-> Right ()
+  --                     (Right y, Left x) ->Left x
+  --                     (Left y, _) -> Left y
+checkPi g (New name t p) = checkPi (Map.insert name (TChan t) g) p
 checkPi g (Out name e) = case (g ! name, typeExp g e) of
-                    (TChan t1, Right t2) -> if t1 == t2 then Right () else Left "type error for sending on a channel"
-                    (TTup t, Right (TTup t2)) -> if t == t2 then Right () else Left "type error for sending on a channel"
+                    (TChan t1, Right t2) -> if t1 == t2 then Right () else Left ("type error for sending on a channel " ++ show t1 ++ " " ++ show t2 ++ " " ++ name)
+                    -- (TTup t, Right (TTup t2)) -> if t == t2 then Right () else Left "type error for sending on a channel"
                     (TChan t1, Left e) -> Left e 
                     _ -> Left "merp"
-checkPi g (Inp name pat p) = case (typePat g pat (g! name), checkPi g p) of
-                    (Right g1, Right ()) -> Right ()
-                    (Right g1, Left e) -> Left e
-                    (Left e, _ )-> Left e
-checkPi g (RepInp name pat p) = case (typePat g pat (g! name), checkPi g p) of
-                    (Right g1, Right ()) -> Right ()
-                    _ -> Left "repInput pattern failed to type check..... >:{o"
+checkPi g (Inp name pat p) = case (g!name) of
+          TChan t -> do{g1 <- typePat g pat t; checkPi g1 p}
+          _ -> error "trying to recieve on non channel type"
+  -- case (typePat g pat (g! name), checkPi g p) of
+  --                   (Right g1, Right ()) -> Right ()
+  --                   (Right g1, Left e) -> Left e
+  --                   (Left e, _ )-> Left e
+checkPi g (RepInp name pat p) = case (g!name) of
+          TChan t -> do{g1 <- typePat g pat t; checkPi g1 p }
+          _ -> error "trying to recieve on non channel type"
+  -- case (typePat g pat (g! name), checkPi g p) of
+  --                   (Right g1, Right ()) -> Right ()
 checkPi g (Embed f p) = checkPi g p
               
 
@@ -181,11 +187,11 @@ type Env = Map Name Value
 -- evalPat env p v
 -- match a value v against a pattern p and extend environment env
 evalPat :: Env -> Pattern -> Value -> Env
-evalPat gamma (PVar []) (VTup []) = gamma
-evalPat gamma (PVar n) v = (Map.insert n v gamma)
-evalPat gamma Wild v = gamma
-evalPat gamma (PTup ((PVar n):ns)) (VTup (v:vs)) = if length ns == length vs 
-                                     then Map.union (Map.insert n v gamma) (evalPat gamma (PTup ns) (VTup vs)) 
+evalPat env (PVar []) (VTup []) = env
+evalPat env (PVar n) v = (Map.insert n v env)
+evalPat env Wild v = env
+evalPat env (PTup ((PVar n):ns)) (VTup (v:vs)) = if length ns == length vs 
+                                     then Map.union (Map.insert n v env) (evalPat env (PTup ns) (VTup vs)) 
                                      else error "you fucked up"
 -- evalExp env e
 -- evaluates e to a value in environment env
