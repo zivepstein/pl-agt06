@@ -26,8 +26,8 @@ test3 =
 
 
 test3andahalf =
-  New n unitT $
-  (Out n unitE) :|: (Out n unitE) :|: (Inp n (PVar i) test1') :|: (Inp n (PVar i) test1') :|: (Inp n (PVar i) test1) 
+  New n unitT $ New o unitT $
+  (Out n unitE) :|: (Out o unitE) :|: (Inp n (PVar i) ((Inp o (PVar i) test3andahalf)))
 
 rep n pi | n <= 0 = Nil
 rep n pi | n > 0  = pi :|: rep (n-1) pi

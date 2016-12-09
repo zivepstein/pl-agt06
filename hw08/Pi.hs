@@ -116,7 +116,7 @@ typeExpAux :: Gamma -> [Exp] -> [Typ]
 typeExpAux g [] = []
 typeExpAux g (e:es) = case typeExp g e of
                   Right t -> t : (typeExpAux g es)
-                  Left s -> error "with with finding types in ttup"
+                  Left s -> error $ "with with finding types in ttup: " ++ (show g) ++" trying to find " ++ (show e)
 
 maybe2Either :: Name -> Gamma -> Either String Typ
 maybe2Either n g = case Map.lookup n g of 
@@ -124,27 +124,38 @@ maybe2Either n g = case Map.lookup n g of
                     (Just t) -> Right t
 
 typePat :: Gamma -> Pattern -> Typ -> Either String Gamma
-typePat gamma (PVar []) (TTup []) = Right gamma
+typePat gamma (PTup []) (TTup []) = Right gamma
 typePat gamma (PVar n) v = Right (Map.insert n v gamma)
 typePat gamma Wild v = Right gamma
+typePat gamma (PTup ((Wild):ns)) (TTup (t:ts)) = if length ns == length ts 
+                                     then case (typePat gamma (PTup ns) (TTup ts)) of
+                                      Right g -> Right $ Map.union gamma g
+                                      Left s -> error "pattern typing failed for remaining list"
+                                     else error "you fucked up"
 typePat gamma (PTup ((PVar n):ns)) (TTup (t:ts)) = if length ns == length ts 
                                      then case (typePat gamma (PTup ns) (TTup ts)) of
                                       Right g -> Right $ Map.union (Map.insert n t gamma) g
                                       Left s -> error "pattern typing failed for remaining list"
                                      else error "you fucked up"
+typePat gamma p v = error $ "you did something wrong pattern and types are......." ++ (show p) ++ " " ++ (show v)                                     
+
 
 checkPi :: Gamma -> Pi -> Either String ()
 checkPi g Nil = Right ()
-checkPi g (p1 :|: p2) = case (checkPi p1, checkPi p2) of
-                      (Right (), Right ()) -> Right ()
-                      _ -> Left "molly said u fucked up"
+checkPi g (p1 :|: p2) = case (checkPi g p1, checkPi g p2) of
+                      (Right y, Right x )-> Right ()
+                      (Right y, Left x) ->Left x
+                      (Left y, _) -> Left y
 checkPi g (New name t p) = checkPi (Map.insert name t g) p
-checkPi g (Out name e) = case (g ! name,typeExp e) of
-                    (TChan t, Right t) -> Right ()
+checkPi g (Out name e) = case (g ! name, typeExp g e) of
+                    (TChan t1, Right t2) -> if t1 == t2 then Right () else Left "type error for sending on a channel"
+                    (TTup t, Right (TTup t2)) -> if t == t2 then Right () else Left "type error for sending on a channel"
+                    (TChan t1, Left e) -> Left e 
                     _ -> Left "merp"
 checkPi g (Inp name pat p) = case (typePat g pat (g! name), checkPi g p) of
                     (Right g1, Right ()) -> Right ()
-                    _ -> Left "input pattern failed to type check..... >:("
+                    (Right g1, Left e) -> Left e
+                    (Left e, _ )-> Left e
 checkPi g (RepInp name pat p) = case (typePat g pat (g! name), checkPi g p) of
                     (Right g1, Right ()) -> Right ()
                     _ -> Left "repInput pattern failed to type check..... >:{o"
@@ -187,24 +198,20 @@ evalExp env (ETup es) = VTup (evalExps env es)
 --TODO: if we send more things to the channel than we read out no error is thrown / they're just ignored. Is this chill?
 run :: Env -> Pi -> IO ()
 run env Nil = pure ()
-run env (p1 :|: p2) = case p2 of
-                (Inp name pat p) ->  do{ y <- run env (send2front p2 p1); return ()}
-                (RepInp name pat p) ->  do{ y <- run env (send2front p2 p1); return ()}
-                _ ->  do{ x <- run env p2;y <- run env p1; return ()}
-run env (New name t p) = let newN = (newName env) in do{c <- newChan; n <- pure newN; run (Map.insert name (VChan c) env) p}
+run env (p1 :|: p2) = parallel [run env p1, run env p2]
+run env (New name t p) =  do{c <- newChan; run (Map.insert name (VChan c) env) p}
 run env (Out name e) =  case  Map.lookup name env of 
                    (Just (VChan c)) -> writeChan c (evalExp env e)
                    (Just (VTup c)) -> error "can't send on multiple channels"
-                   Nothing -> error "no such channel"
+                   Nothing -> error ("no such channel env" ++ (show env) ++ " " ++ name)
 run env (Inp name pat p) = do{
             r <- readChan (dvchan (env ! name));
             env' <- pure (evalPat env pat r) ;
             run env' p}
-run env (RepInp name pat p) =  do {
-            r<- readChan (dvchan (env ! name));
-            env' <- pure (evalPat env pat r);
-            run env' (p :|: RepInp name pat p)}
-          
+run env (RepInp name pat p) =  do 
+            r <- readChan (dvchan (env ! name))
+            let env' = (evalPat env pat r)
+            parallel [run env' p, run env' (RepInp name pat p)]         
 run env (Embed f p) = do{x <- f env; run env p}
 
 send2front :: Pi -> Pi -> Pi
@@ -232,7 +239,11 @@ rev x = x
 
 -----For young natalie to ask young campbell:
       ---help with eval (:|: order of operations)
+      		-- FAM WE WERE SUPPOSED TO USE parallel
       ---run(file="theory.txt", mentor=eric_campbell);
+      		-- 	he's down with the theory part, just gotta maybe test at some point
       ---big picture booleans - how might we implement these??????????????
+
       ---new name business -> substituation, must we come up with a new name? does this make any sense? what is life?
+      	-- na dog just don't need it and seems to work for peeps
       ---all the answers, plz

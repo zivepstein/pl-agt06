@@ -22,6 +22,8 @@ app =
     LAbs x u $
       LApp fv xv
 
+test1andsome =  (LAbs x u $ printL "hello!\n" xv)
+
 test2 =
   LApp (LApp app (LAbs x u $ printL "hello!\n" xv)) (printL "hi" LUnit)
 

@@ -120,7 +120,37 @@ typeTrans (LTArrow t1 t2) = TTup [TChan (typeTrans t1), TChan (typeTrans t2)]
 -- compiler goes here
 -- note that your first argument is a name generator, to come up with fresh channel names
 compileLam :: IO Name -> Name -> Gamma -> Lam -> IO (LTyp, Pi)
-compileLam = undefined
+compileLam nameGen chan g LUnit = pure (LTUnit, (Out chan (ETup []))) 
+compileLam nameGen chan g (LVar name) = pure (g ! name, (Out chan (ETup [EVar name]))) 
+compileLam nameGen chan g (LAbs name t l) = do{
+          newname <- nameGen;
+          evalchan <- nameGen;
+          (l',p) <- compileLam nameGen evalchan (Map.insert name t g) l;
+          pure (LTArrow t l', (New newname (typeTrans t) (New evalchan (typeTrans l') ((Inp newname (PVar newname) p)
+           :|: (Out chan (ETup [EVar newname, EVar evalchan])))))) }
+          -- check that l1' and l2' are correct types
+          -- at some point run p1 and p
+compileLam nameGen chan g (LApp l1 l2) = do{
+          newname1 <- nameGen;
+          newname2 <- nameGen;
+          i <- nameGen;
+          o <- nameGen;
+          v <- nameGen;
+          v' <- nameGen;
+          (LTArrow a b, p1) <- compileLam nameGen newname1 g l1;
+          (x, p2) <- compileLam nameGen newname2 g l2;
+          if (a == x) 
+            then pure (b, New newname1 (typeTrans (LTArrow a b)) (New newname2 (typeTrans (a)) 
+              (Inp newname1 (PTup[PVar i, PVar o]) (Inp newname2 (PVar v) ((Out i (EVar v)) :|: (Inp o (PVar v') (Out chan (EVar v'))))))
+              :|:p1 :|: p2))
+            else error $ "poorly typed things" ++ show (LTArrow a b) ++ " is not valid with " ++(show x)
+
+}
+compileLam nameGen chan g (LEff f l) = do {
+          x <- f;
+          compileLam nameGen chan g l
+}
+
 
 startLam :: Lam -> IO ()
 startLam e = do

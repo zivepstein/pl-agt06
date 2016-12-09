@@ -13,16 +13,16 @@ env3 = M.insert y False env2
 
 type Test = (BEnv, BoolExp)
 
-test1 = (env1, t)
-test2 = (env1, f)
-test3 = (env1, t :&&: (f :||: t) :&&: (Not f))
-test4 = (env2, BVar x)
-test5 = (env3, BVar x :&&: BVar y)
-test6 = (env3, BVar x :&&: (BVar y :||: (t :&&: (f :||: t))))
-test7 = (env3, BVar x :&&: (BVar y :||: (t :&&: (f :||: f))))
-test8 = (env3, Not (BVar y))
-test9 = (env3, Not (BVar y :&&: BVar x))
-test10 = (env3, BVar y :||: (BVar x :&&: BVar x))
+test1 = (env1, t) --t
+test2 = (env1, f) --f
+test3 = (env1, t :&&: (f :||: t) :&&: (Not f)) --t
+test4 = (env2, BVar x) --t
+test5 = (env3, BVar x :&&: BVar y) --f
+test6 = (env3, BVar x :&&: (BVar y :||: (t :&&: (f :||: t)))) --t
+test7 = (env3, BVar x :&&: (BVar y :||: (t :&&: (f :||: f)))) --f
+test8 = (env3, Not (BVar y)) --t
+test9 = (env3, Not (BVar y :&&: BVar x)) --t
+test10 = (env3, BVar y :||: (BVar x :&&: BVar x)) --t
 
 tests = [test1, test2, test3, test4, test5, test6, test7, test8, test9, test10]
 
